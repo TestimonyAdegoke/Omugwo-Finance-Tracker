@@ -24,7 +24,6 @@ export const getFinancialAdvice = async (transactions: Transaction[], categories
     
     Keep it professional, encouraging, and concise.
   `;
-
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',

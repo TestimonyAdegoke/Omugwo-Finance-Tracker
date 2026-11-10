@@ -1,18 +1,31 @@
-
 import React, { useState } from 'react';
-import { Target, TrendingUp, AlertCircle, CheckCircle2, ListChecks, ArrowRight, Save, X } from 'lucide-react';
+import { Target, TrendingUp, AlertCircle, CheckCircle2, ListChecks, ArrowRight, Save, X, Loader2 } from 'lucide-react';
 import { Budget, Category, Transaction } from '../types';
+import { budgetService } from '../lib/supabaseService';
+import { isSupabaseConfigured } from '../lib/supabase';
+
+const currencySymbols: Record<string, string> = {
+  NGN: '₦',
+  USD: '$',
+  EUR: '€',
+  GBP: '£'
+};
+
+const getCurrencySymbol = (code: string) => currencySymbols[code] || code;
 
 interface BudgetTrackerProps {
   budgets: Budget[];
   setBudgets: React.Dispatch<React.SetStateAction<Budget[]>>;
   transactions: Transaction[];
   categories: Category[];
+  defaultCurrency: string;
 }
 
-const BudgetTracker: React.FC<BudgetTrackerProps> = ({ budgets, setBudgets, transactions, categories }) => {
+const BudgetTracker: React.FC<BudgetTrackerProps> = ({ budgets, setBudgets, transactions, categories, defaultCurrency }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [localBudgets, setLocalBudgets] = useState<{ [key: string]: string }>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const currentMonth = new Date().toISOString().substring(0, 7); 
   const expenseCategories = categories.filter(c => c.type === 'EXPENSE');
@@ -24,16 +37,28 @@ const BudgetTracker: React.FC<BudgetTrackerProps> = ({ budgets, setBudgets, tran
     setIsEditing(true);
   };
 
-  const saveBudgets = () => {
-    // Explicitly cast Object.entries to fix 'unknown' type inference issue
-    const newBudgets: Budget[] = (Object.entries(localBudgets) as [string, string][])
-      .filter(([_, amount]) => amount && !isNaN(parseFloat(amount)))
-      .map(([catId, amount]) => ({
-        categoryId: catId,
-        monthlyLimit: parseFloat(amount)
-      }));
-    setBudgets(newBudgets);
-    setIsEditing(false);
+  const saveBudgets = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const newBudgets: Budget[] = (Object.entries(localBudgets) as [string, string][])
+        .filter(([_, amount]) => amount && !isNaN(parseFloat(amount)))
+        .map(([catId, amount]) => ({
+          categoryId: catId,
+          monthlyLimit: parseFloat(amount)
+        }));
+      
+      if (isSupabaseConfigured) {
+        await budgetService.upsert(newBudgets, currentMonth);
+      }
+      setBudgets(newBudgets);
+      setIsEditing(false);
+    } catch (err) {
+      console.error('Error saving budgets:', err);
+      setError('Failed to save budgets');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getSpendingForCategory = (catId: string) => {
@@ -83,7 +108,9 @@ const BudgetTracker: React.FC<BudgetTrackerProps> = ({ budgets, setBudgets, tran
                     <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{cat.name}</span>
                   </div>
                   <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">
+                      {getCurrencySymbol(defaultCurrency)}
+                    </span>
                     <input 
                       type="number"
                       value={localBudgets[cat.id] || ''}
@@ -101,12 +128,12 @@ const BudgetTracker: React.FC<BudgetTrackerProps> = ({ budgets, setBudgets, tran
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-              <p className="text-sm font-bold text-slate-400 uppercase mb-2">Monthly Budget Cap</p>
-              <p className="text-3xl font-bold text-slate-900 font-mono">${totalBudgeted.toLocaleString()}</p>
+              <p className="text-sm font-bold text-slate-400 uppercase mb-2">Monthly Budget Cap ({defaultCurrency})</p>
+              <p className="text-3xl font-bold text-slate-900 font-mono">{defaultCurrency} {totalBudgeted.toLocaleString()}</p>
             </div>
             <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-              <p className="text-sm font-bold text-slate-400 uppercase mb-2">Current Spend</p>
-              <p className={`text-3xl font-bold font-mono ${totalSpent > totalBudgeted ? 'text-rose-600' : 'text-emerald-600'}`}>${totalSpent.toLocaleString()}</p>
+              <p className="text-sm font-bold text-slate-400 uppercase mb-2">Current Spend ({defaultCurrency})</p>
+              <p className={`text-3xl font-bold font-mono ${totalSpent > totalBudgeted ? 'text-rose-600' : 'text-emerald-600'}`}>{defaultCurrency} {totalSpent.toLocaleString()}</p>
             </div>
             <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
               <div>
@@ -139,7 +166,7 @@ const BudgetTracker: React.FC<BudgetTrackerProps> = ({ budgets, setBudgets, tran
                       </div>
                       <div>
                         <h3 className="font-bold text-lg">{category.name}</h3>
-                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Monthly Limit: ${budget.monthlyLimit.toLocaleString()}</p>
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Monthly Limit: {defaultCurrency} {budget.monthlyLimit.toLocaleString()}</p>
                       </div>
                     </div>
                   </div>
@@ -147,7 +174,7 @@ const BudgetTracker: React.FC<BudgetTrackerProps> = ({ budgets, setBudgets, tran
                   <div className="space-y-4">
                     <div className="flex justify-between text-sm font-bold">
                       <span className="text-slate-500 uppercase">Usage</span>
-                      <span className={isOver ? 'text-rose-600' : 'text-slate-900'}>${actual.toLocaleString()} ({Math.round((actual / budget.monthlyLimit) * 100)}%)</span>
+                      <span className={isOver ? 'text-rose-600' : 'text-slate-900'}>{defaultCurrency} {actual.toLocaleString()} ({Math.round((actual / budget.monthlyLimit) * 100)}%)</span>
                     </div>
                     <div className="h-4 bg-slate-50 rounded-full overflow-hidden border border-slate-100 p-0.5">
                       <div 
@@ -157,9 +184,9 @@ const BudgetTracker: React.FC<BudgetTrackerProps> = ({ budgets, setBudgets, tran
                     </div>
                     <div className={`p-4 rounded-2xl flex items-center gap-3 text-sm font-medium ${isOver ? 'bg-rose-50 text-rose-700 border border-rose-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>
                       {isOver ? (
-                        <><AlertCircle size={18} /> Budget exceeded by ${(actual - budget.monthlyLimit).toLocaleString()}</>
+                        <><AlertCircle size={18} /> Budget exceeded by {defaultCurrency} {(actual - budget.monthlyLimit).toLocaleString()}</>
                       ) : (
-                        <><CheckCircle2 size={18} /> Healthy! ${(budget.monthlyLimit - actual).toLocaleString()} safe for this month</>
+                        <><CheckCircle2 size={18} /> Healthy! {defaultCurrency} {(budget.monthlyLimit - actual).toLocaleString()} safe for this month</>
                       )}
                     </div>
                   </div>

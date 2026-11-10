@@ -26,9 +26,10 @@ interface TransactionListProps {
   partners: Partner[];
   onDelete: (id: string) => void;
   onEdit: (t: Transaction) => void;
+  defaultCurrency: string;
 }
 
-const TransactionList: React.FC<TransactionListProps> = ({ transactions, categories, partners, onDelete, onEdit }) => {
+const TransactionList: React.FC<TransactionListProps> = ({ transactions, categories, partners, onDelete, onEdit, defaultCurrency }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
@@ -88,7 +89,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, categor
   };
 
   const exportToCsv = () => {
-    const headers = ['Date', 'Type', 'Category', 'Partner', 'Amount', 'Description', 'Method'];
+    const headers = ['Date', 'Type', 'Category', 'Partner', `Amount (${defaultCurrency})`, 'Description', 'Method'];
     const rows = filteredTransactions.map(t => [
       t.date,
       t.type,
@@ -228,7 +229,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, categor
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="block text-[10px] font-bold text-blue-600 uppercase px-1">Min Amount ($)</label>
+                <label className="block text-[10px] font-bold text-blue-600 uppercase px-1">Min Amount ({defaultCurrency})</label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400" size={16} />
                   <input 
@@ -241,7 +242,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, categor
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="block text-[10px] font-bold text-blue-600 uppercase px-1">Max Amount ($)</label>
+                <label className="block text-[10px] font-bold text-blue-600 uppercase px-1">Max Amount ({defaultCurrency})</label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400" size={16} />
                   <input 
@@ -303,7 +304,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, categor
                       t.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'
                     }`}>
                       {t.type === 'INCOME' ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                      ${t.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {defaultCurrency} {t.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
@@ -367,7 +368,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, categor
                   {selectedTransaction.type === 'INCOME' ? <ArrowUpRight size={40} /> : <ArrowDownRight size={40} />}
                 </div>
                 <h3 className="text-3xl font-mono font-bold text-slate-900">
-                  {selectedTransaction.type === 'INCOME' ? '+' : '-'}${selectedTransaction.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {selectedTransaction.type === 'INCOME' ? '+' : '-'}{defaultCurrency} {selectedTransaction.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </h3>
                 <p className="text-sm font-medium text-slate-500 uppercase tracking-widest">{selectedTransaction.type}</p>
               </div>
@@ -411,6 +412,21 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, categor
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Description</p>
                   <p className="text-sm font-medium text-slate-600 leading-relaxed">{selectedTransaction.description}</p>
                 </div>
+
+                {selectedTransaction.currencyCode && selectedTransaction.currencyCode !== defaultCurrency && selectedTransaction.originalAmount && selectedTransaction.exchangeRate && (
+                  <div className="pt-4 border-t border-slate-200 space-y-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">FX Details</p>
+                    <p className="text-xs text-slate-600">
+                      Original: <span className="font-mono font-semibold">{selectedTransaction.currencyCode} {selectedTransaction.originalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </p>
+                    <p className="text-xs text-slate-600">
+                      Rate: <span className="font-mono">1 {selectedTransaction.currencyCode} = {defaultCurrency} {selectedTransaction.exchangeRate.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</span>
+                    </p>
+                    <p className="text-xs text-slate-600">
+                      Stored amount: <span className="font-mono font-semibold">{defaultCurrency} {selectedTransaction.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-4">

@@ -8,9 +8,10 @@ interface ReportsProps {
   transactions: Transaction[];
   categories: Category[];
   partners: Partner[];
+  defaultCurrency: string;
 }
 
-const Reports: React.FC<ReportsProps> = ({ transactions, categories, partners }) => {
+const Reports: React.FC<ReportsProps> = ({ transactions, categories, partners, defaultCurrency }) => {
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
   const monthlyData = useMemo(() => {
@@ -98,7 +99,7 @@ const Reports: React.FC<ReportsProps> = ({ transactions, categories, partners })
                     <span className="text-slate-600 font-mono text-xs">{i+1}.</span>
                     <span className="font-medium">{name}</span>
                   </div>
-                  <span className="font-mono font-bold text-blue-400">${amount.toLocaleString()}</span>
+                  <span className="font-mono font-bold text-blue-400">{defaultCurrency} {amount.toLocaleString()}</span>
                 </div>
               ))}
             </div>

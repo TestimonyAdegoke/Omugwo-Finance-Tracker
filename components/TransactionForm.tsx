@@ -1,8 +1,17 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, DollarSign, Tag, Info, Users, Repeat, PlusCircle } from 'lucide-react';
+import { X, Calendar, Tag, Info, Users, Repeat, PlusCircle } from 'lucide-react';
 import { Category, TransactionType, Partner, Transaction } from '../types';
 import { PAYMENT_METHODS } from '../constants';
+
+const currencySymbols: Record<string, string> = {
+  NGN: '₦',
+  USD: '$',
+  EUR: '€',
+  GBP: '£'
+};
+
+const getCurrencySymbol = (code: string) => currencySymbols[code] || code;
 
 interface TransactionFormProps {
   categories: Category[];
@@ -11,9 +20,10 @@ interface TransactionFormProps {
   onSubmit: (t: any, recurring?: { frequency: string }) => void;
   onClose: () => void;
   onAddPartner: (p: Omit<Partner, 'id'>) => Partner;
+  defaultCurrency: string;
 }
 
-const TransactionForm: React.FC<TransactionFormProps> = ({ categories, partners, initialData, onSubmit, onClose, onAddPartner }) => {
+const TransactionForm: React.FC<TransactionFormProps> = ({ categories, partners, initialData, onSubmit, onClose, onAddPartner, defaultCurrency }) => {
   const [type, setType] = useState<TransactionType>(initialData?.type || 'INCOME');
   const [isRecurring, setIsRecurring] = useState(!!initialData?.recurringId);
   const [frequency, setFrequency] = useState('MONTHLY');
@@ -31,15 +41,47 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, partners,
     source: initialData?.source || '',
   });
 
+  const [currencyCode, setCurrencyCode] = useState<string>(initialData?.currencyCode || defaultCurrency);
+  const [originalAmount, setOriginalAmount] = useState<string>(initialData?.originalAmount?.toString() || '');
+  const [exchangeRate, setExchangeRate] = useState<string>(initialData?.exchangeRate?.toString() || '');
+
   const filteredCategories = categories.filter(c => c.type === type);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.amount || !formData.categoryId || !formData.description) {
-      alert('Please fill in required fields');
+    if (!formData.categoryId) {
+      alert('Please select a category');
       return;
     }
-    const data = { ...formData, amount: parseFloat(formData.amount), type };
+
+    let finalAmount = 0;
+    let originalAmountValue: number | undefined;
+    let exchangeRateValue: number | undefined;
+
+    if (currencyCode === defaultCurrency) {
+      if (!formData.amount) {
+        alert('Please enter an amount');
+        return;
+      }
+      finalAmount = parseFloat(formData.amount);
+    } else {
+      if (!originalAmount || !exchangeRate) {
+        alert('Please enter original amount and exchange rate for foreign currency');
+        return;
+      }
+      originalAmountValue = parseFloat(originalAmount);
+      exchangeRateValue = parseFloat(exchangeRate);
+      finalAmount = originalAmountValue * exchangeRateValue;
+    }
+
+    const data: any = {
+      ...formData,
+      amount: finalAmount,
+      type,
+      currencyCode,
+      originalAmount: originalAmountValue,
+      exchangeRate: exchangeRateValue,
+    };
     if (!initialData) {
       delete (data as any).id;
     }
@@ -61,7 +103,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, partners,
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-100 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
       <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden my-auto animate-in fade-in zoom-in duration-200">
         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
           <h2 className="text-xl font-bold">{initialData ? 'Edit Transaction' : 'New Financial Entry'}</h2>
@@ -77,12 +119,74 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, partners,
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wide">Amount ($)</label>
-              <div className="relative">
-                <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input type="number" step="0.01" required value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} placeholder="0.00" className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-2xl font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <div className="col-span-2 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wide">Currency</label>
+                  <select
+                    value={currencyCode}
+                    onChange={e => setCurrencyCode(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={defaultCurrency}>{defaultCurrency}</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                  </select>
+                </div>
               </div>
+
+              {currencyCode === defaultCurrency ? (
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wide">Amount ({defaultCurrency})</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">
+                      {getCurrencySymbol(defaultCurrency)}
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formData.amount}
+                      onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                      placeholder="0.00"
+                      className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-2xl font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wide">Amount ({currencyCode})</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">
+                        {getCurrencySymbol(currencyCode)}
+                      </span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={originalAmount}
+                        onChange={e => setOriginalAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-base font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wide">Exchange Rate ({currencyCode} → {defaultCurrency})</label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={exchangeRate}
+                      onChange={e => setExchangeRate(e.target.value)}
+                      placeholder="e.g. 1600"
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  {originalAmount && exchangeRate && (
+                    <p className="text-xs text-slate-500">Converted amount: <span className="font-mono font-bold">{defaultCurrency} {(parseFloat(originalAmount || '0') * parseFloat(exchangeRate || '0')).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>
@@ -173,7 +277,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ categories, partners,
 
             <div className="col-span-2">
               <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wide">Description</label>
-              <textarea required rows={2} value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="What is this for?" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+              <textarea rows={2} value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="What is this for? (optional)" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
             </div>
           </div>
 

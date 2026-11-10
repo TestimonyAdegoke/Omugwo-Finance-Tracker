@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -27,25 +27,41 @@ interface DashboardProps {
   summary: FinancialSummary;
   transactions: Transaction[];
   categories: Category[];
+  defaultCurrency: string;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ summary, transactions, categories }) => {
-  const last7Days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    const dateStr = d.toISOString().split('T')[0];
-    const dayIncome = transactions
-      .filter(t => t.date === dateStr && t.type === 'INCOME')
-      .reduce((sum, t) => sum + t.amount, 0);
-    const dayExpense = transactions
-      .filter(t => t.date === dateStr && t.type === 'EXPENSE')
-      .reduce((sum, t) => sum + t.amount, 0);
-    return { 
-      name: d.toLocaleDateString('en-US', { weekday: 'short' }), 
-      income: dayIncome, 
-      expense: dayExpense 
-    };
-  });
+const Dashboard: React.FC<DashboardProps> = ({ summary, transactions, categories, defaultCurrency }) => {
+  const [startMonth, setStartMonth] = useState<string>('');
+  const [endMonth, setEndMonth] = useState<string>('');
+
+  const monthlyData = useMemo(() => {
+    const map: { [month: string]: { month: string; income: number; expense: number } } = {};
+    const now = new Date();
+    const cutoff = new Date();
+    cutoff.setMonth(now.getMonth() - 23); // last 24 months window
+
+    transactions.forEach(t => {
+      const d = new Date(t.date);
+      if (d < cutoff || d > now) return;
+      const monthKey = t.date.substring(0, 7);
+      if (!map[monthKey]) {
+        map[monthKey] = { month: monthKey, income: 0, expense: 0 };
+      }
+      if (t.type === 'INCOME') map[monthKey].income += t.amount;
+      else map[monthKey].expense += t.amount;
+    });
+
+    let values = Object.values(map).sort((a, b) => a.month.localeCompare(b.month));
+
+    if (startMonth) {
+      values = values.filter(m => m.month >= startMonth);
+    }
+    if (endMonth) {
+      values = values.filter(m => m.month <= endMonth);
+    }
+
+    return values;
+  }, [transactions, startMonth, endMonth]);
 
   const categoryData = categories
     .filter(c => transactions.some(t => t.categoryId === c.id))
@@ -72,7 +88,13 @@ const Dashboard: React.FC<DashboardProps> = ({ summary, transactions, categories
         )}
       </div>
       <h3 className="text-slate-500 text-sm font-medium mb-1">{title}</h3>
-      <p className="text-2xl font-bold font-mono">{typeof value === 'number' ? `$${value.toLocaleString()}` : value}</p>
+      <p className="text-2xl font-bold font-mono">
+        {typeof value === 'number' ? (
+          <>{defaultCurrency} {value.toLocaleString()}</>
+        ) : (
+          value
+        )}
+      </p>
     </div>
   );
 
@@ -93,12 +115,34 @@ const Dashboard: React.FC<DashboardProps> = ({ summary, transactions, categories
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="font-bold mb-6">Weekly Revenue Trends</h3>
+          <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
+            <h3 className="font-bold">Monthly Revenue Trends</h3>
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <div className="flex items-center gap-1">
+                <span>From</span>
+                <input
+                  type="month"
+                  value={startMonth}
+                  onChange={e => setStartMonth(e.target.value)}
+                  className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex items-center gap-1">
+                <span>To</span>
+                <input
+                  type="month"
+                  value={endMonth}
+                  onChange={e => setEndMonth(e.target.value)}
+                  className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          </div>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={last7Days}>
+              <BarChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
                 <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)'}} />
                 <Bar dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />

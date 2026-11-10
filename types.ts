@@ -66,6 +66,9 @@ export interface Transaction {
   recurringId?: string;
   tags?: string[];
   attachment?: string;
+  currencyCode?: string;
+  originalAmount?: number;
+  exchangeRate?: number;
 }
 
 export interface FinancialSummary {

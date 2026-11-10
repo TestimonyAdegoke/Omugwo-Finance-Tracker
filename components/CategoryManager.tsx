@@ -1,7 +1,8 @@
-
 import React, { useState } from 'react';
-import { Plus, Trash2, Tag, Edit2, Save, X } from 'lucide-react';
+import { Plus, Trash2, Tag, Edit2, Save, X, Loader2 } from 'lucide-react';
 import { Category, TransactionType } from '../types';
+import { categoryService } from '../lib/supabaseService';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 interface CategoryManagerProps {
   categories: Category[];
@@ -15,16 +16,45 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, setCatego
   const [newColor, setNewColor] = useState('#3b82f6');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: '', color: '' });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const addCategory = () => {
+  const addCategory = async () => {
     if (!newName) return;
-    setCategories([...categories, { id: Math.random().toString(36).substr(2, 9), name: newName, type: newType, color: newColor }]);
-    setNewName('');
+    setIsLoading(true);
+    setError(null);
+    try {
+      let newCategory: Category;
+      if (isSupabaseConfigured) {
+        newCategory = await categoryService.create({ name: newName, type: newType, color: newColor });
+      } else {
+        newCategory = { id: Math.random().toString(36).substr(2, 9), name: newName, type: newType, color: newColor };
+      }
+      setCategories([...categories, newCategory]);
+      setNewName('');
+    } catch (err) {
+      console.error('Error adding category:', err);
+      setError('Failed to add category');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const deleteCategory = (id: string) => {
+  const deleteCategory = async (id: string) => {
     if (confirm('Delete this category? Transactions will remain but lose category link.')) {
-      setCategories(categories.filter(c => c.id !== id));
+      setIsLoading(true);
+      setError(null);
+      try {
+        if (isSupabaseConfigured) {
+          await categoryService.delete(id);
+        }
+        setCategories(categories.filter(c => c.id !== id));
+      } catch (err) {
+        console.error('Error deleting category:', err);
+        setError('Failed to delete category');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -33,9 +63,22 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, setCatego
     setEditForm({ name: cat.name, color: cat.color });
   };
 
-  const saveEdit = (cat: Category) => {
-    onUpdateCategory({ ...cat, name: editForm.name, color: editForm.color });
-    setEditingId(null);
+  const saveEdit = async (cat: Category) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const updated = { ...cat, name: editForm.name, color: editForm.color };
+      if (isSupabaseConfigured) {
+        await categoryService.update(cat.id, updated);
+      }
+      setCategories(categories.map(c => c.id === cat.id ? updated : c));
+      setEditingId(null);
+    } catch (err) {
+      console.error('Error updating category:', err);
+      setError('Failed to update category');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const CategorySection = ({ type, title, colorClass }: { type: TransactionType, title: string, colorClass: string }) => (

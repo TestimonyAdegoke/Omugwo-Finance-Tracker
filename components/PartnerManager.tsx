@@ -1,7 +1,8 @@
-
 import React, { useState } from 'react';
-import { Plus, Trash2, Users, Mail, Phone, Tag, Globe, MapPin, Notebook, ArrowRight, ArrowLeft, Receipt, X, Edit2, Save } from 'lucide-react';
+import { Plus, Trash2, Users, Mail, Phone, Tag, Globe, MapPin, Notebook, ArrowRight, ArrowLeft, Receipt, X, Edit2, Save, Loader2 } from 'lucide-react';
 import { Partner, PartnerType, Transaction, Category } from '../types';
+import { partnerService } from '../lib/supabaseService';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 interface PartnerManagerProps {
   partners: Partner[];
@@ -14,6 +15,8 @@ const PartnerManager: React.FC<PartnerManagerProps> = ({ partners, setPartners, 
   const [isAdding, setIsAdding] = useState(false);
   const [editingPartnerId, setEditingPartnerId] = useState<string | null>(null);
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   const [formData, setFormData] = useState<Omit<Partner, 'id'>>({
     name: '',
@@ -27,12 +30,27 @@ const PartnerManager: React.FC<PartnerManagerProps> = ({ partners, setPartners, 
 
   const [editFormData, setEditFormData] = useState<Partner | null>(null);
 
-  const addPartner = (e: React.FormEvent) => {
+  const addPartner = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name) return;
-    setPartners([...partners, { ...formData, id: Math.random().toString(36).substr(2, 9) }]);
-    resetAddForm();
-    setIsAdding(false);
+    setIsLoading(true);
+    setError(null);
+    try {
+      let newPartner: Partner;
+      if (isSupabaseConfigured) {
+        newPartner = await partnerService.create(formData);
+      } else {
+        newPartner = { ...formData, id: Math.random().toString(36).substr(2, 9) };
+      }
+      setPartners([...partners, newPartner]);
+      resetAddForm();
+      setIsAdding(false);
+    } catch (err) {
+      console.error('Error adding partner:', err);
+      setError('Failed to add partner');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const resetAddForm = () => {
@@ -44,18 +62,42 @@ const PartnerManager: React.FC<PartnerManagerProps> = ({ partners, setPartners, 
     setEditingPartnerId(p.id);
   };
 
-  const saveEditedPartner = (e: React.FormEvent) => {
+  const saveEditedPartner = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editFormData) return;
-    setPartners(partners.map(p => p.id === editFormData.id ? editFormData : p));
-    setEditingPartnerId(null);
-    setEditFormData(null);
+    setIsLoading(true);
+    setError(null);
+    try {
+      if (isSupabaseConfigured) {
+        await partnerService.update(editFormData.id, editFormData);
+      }
+      setPartners(partners.map(p => p.id === editFormData.id ? editFormData : p));
+      setEditingPartnerId(null);
+      setEditFormData(null);
+    } catch (err) {
+      console.error('Error updating partner:', err);
+      setError('Failed to update partner');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const deletePartner = (id: string) => {
+  const deletePartner = async (id: string) => {
     if (confirm('Delete this partner? History will remain but unlinked.')) {
-      setPartners(partners.filter(p => p.id !== id));
-      if (selectedPartnerId === id) setSelectedPartnerId(null);
+      setIsLoading(true);
+      setError(null);
+      try {
+        if (isSupabaseConfigured) {
+          await partnerService.delete(id);
+        }
+        setPartners(partners.filter(p => p.id !== id));
+        if (selectedPartnerId === id) setSelectedPartnerId(null);
+      } catch (err) {
+        console.error('Error deleting partner:', err);
+        setError('Failed to delete partner');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
